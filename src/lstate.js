@@ -46,7 +46,7 @@ class lua_State extends lobject.TValue {
     constructor() {
         super(CT.LUA_TTHREAD, null);
         this.base_ci = new CallInfo(); // Will be populated later
-        this.top = 0;
+        this._top = 0;
         this.ci = null;
         this.ciOff = null;
         this.stack = [];
@@ -59,6 +59,22 @@ class lua_State extends lobject.TValue {
         this.errfunc = 0;
 
         this.value = this;
+    }
+
+    /*
+     * As we don't control the garbage collector, we need to delete our
+     * references to items when the stack top is decreased.
+     * By manipulating the stack's .length property we cheaply drop stack items
+     */
+    set top(v) {
+        let old_length = this.stack.length;
+        this._top = v;
+        this.stack.length = v;
+        this.stack.length = old_length;
+    }
+
+    get top() {
+        return this._top;
     }
 
 }
