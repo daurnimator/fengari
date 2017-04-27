@@ -36,11 +36,12 @@ const luaV_finishOp = function(L) {
         case OCi.OP_UNM: case OCi.OP_BNOT: case OCi.OP_LEN:
         case OCi.OP_GETTABUP: case OCi.OP_GETTABLE: case OCi.OP_SELF: {
             L.stack[base + inst.A] = L.stack[--L.top];
+            L.stack[L.top] = void 0;
             break;
         }
         case OCi.OP_LE: case OCi.OP_LT: case OCi.OP_EQ: {
             let res = !L.stack[L.top - 1].l_isfalse();
-            L.top--;
+            L.stack[--L.top] = void 0;
             if (ci.callstatus & lstate.CIST_LEQ) {  /* "<=" using "<" instead? */
                 assert(op === OCi.OP_LE);
                 ci.callstatus ^= lstate.CIST_LEQ;  /* clear mark */

@@ -149,8 +149,7 @@ const lua_setlocal = function(L, ar, n) {
     let name = local.name;
     let pos = local.pos;
     if (name) {
-        L.stack[pos].type = L.stack[L.top - 1].type;
-        L.stack[pos].value = L.stack[L.top - 1].value;
+        L.stack[pos].setfrom(L.stack[L.top - 1]);
         L.top--;  /* pop value */
     }
     swapextra(L);
@@ -587,7 +586,7 @@ const luaG_errormsg = function(L) {
     if (L.errfunc !== 0) {  /* is there an error handling function? */
         let errfunc = L.errfunc;
         L.stack[L.top] = L.stack[L.top - 1];
-        L.stack[L.top - 1] = L.stack[errfunc];
+        L.stack[L.top - 1].setfrom(L.stack[errfunc]);
         L.top++;
         ldo.luaD_callnoyield(L, L.top - 2, 1);
     }

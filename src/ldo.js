@@ -272,7 +272,8 @@ const luaD_throw = function(L, errcode) {
         let g = L.l_G;
         L.status = errcode;  /* mark it as dead */
         if (g.mainthread.errorJmp) {  /* main thread has a handler? */
-            g.mainthread.stack[g.mainthread.top++] = L.stack[L.top - 1];  /* copy error obj. */
+            let errob = L.stack[L.top - 1];
+            g.mainthread.stack[g.mainthread.top++] = new TValue(errob.type, errob.value);  /* copy error obj. */
             luaD_throw(g.mainthread, errcode);  /* re-throw in main thread */
         } else {  /* no handler at all; abort */
             if (g.panic) {  /* panic function? */

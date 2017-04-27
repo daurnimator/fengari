@@ -97,6 +97,7 @@ const lua_xmove = function(from, to, n) {
     for (let i = 0; i < n; i++) {
         to.stack[to.top] = from.stack[from.top + i];
         to.top++;
+        from.stack[from.top + i] = void 0;
     }
 };
 
@@ -118,9 +119,9 @@ const lua_gettop = function(L) {
 };
 
 const lua_pushvalue = function(L, idx) {
-    L.stack[L.top] = index2addr(L, idx);
+    let from = index2addr(L, idx);
+    L.stack[L.top++] = new TValue(from.type, from.value);
 
-    L.top++;
     assert(L.top <= L.ci.top, "stack overflow");
 };
 
@@ -169,7 +170,7 @@ const lua_rotate = function(L, idx, n) {
 
 const lua_copy = function(L, fromidx, toidx) {
     let from = index2addr(L, fromidx);
-    L.stack[index2addr_(L, toidx)] = new TValue(from.type, from.value);
+    L.stack[index2addr_(L, toidx)].setfrom(from);
 };
 
 const lua_remove = function(L, idx) {
@@ -270,6 +271,7 @@ const lua_pushcclosure = function(L, fn, n) {
         L.top -= n;
         while (n--) {
             cl.upvalue[n] = L.stack[L.top + n];
+            L.stack[L.top + n] = void 0;
         }
 
         L.stack[L.top] = new TValue(CT.LUA_TCCL, cl);
@@ -327,7 +329,8 @@ const auxsetstr = function(L, t, k) {
     L.stack[L.top++] = str;
     lvm.settable(L, t, L.stack[L.top - 1], L.stack[L.top - 2]);
     /* pop value and key */
-    L.top -= 2;
+    L.stack[--L.top] = void 0;
+    L.stack[--L.top] = void 0;
 };
 
 const lua_setglobal = function(L, name) {
@@ -366,7 +369,8 @@ const lua_settable = function(L, idx) {
 
     let t = index2addr(L, idx);
     lvm.settable(L, t, L.stack[L.top - 2], L.stack[L.top - 1]);
-    L.top -= 2;
+    L.stack[--L.top] = void 0;
+    L.stack[--L.top] = void 0;
 };
 
 const lua_setfield = function(L, idx, k) {
@@ -391,7 +395,8 @@ const lua_rawset = function(L, idx) {
     assert(o.ttistable(), "table expected");
     let slot = ltable.luaH_set(o.value, L.stack[L.top - 2]);
     slot.setfrom(L.stack[L.top - 1]);
-    L.top -= 2;
+    L.stack[--L.top] = void 0;
+    L.stack[--L.top] = void 0;
 };
 
 const lua_rawseti = function(L, idx, n) {
@@ -409,7 +414,7 @@ const lua_rawsetp = function(L, idx, p) {
     let k = new TValue(CT.LUA_TLIGHTUSERDATA, p);
     let slot = ltable.luaH_set(o.value, k);
     slot.setfrom(L.stack[L.top - 1]);
-    L.top--;
+    L.stack[--L.top] = void 0;
 };
 
 /*
@@ -530,10 +535,8 @@ const lua_setupvalue = function(L, funcindex, n) {
         let name = aux.name;
         let val = aux.val;
 
-        L.top--;
-        // TODO: what if it's not a pure TValue (closure, table)
-        val.type = L.stack[L.top].type;
-        val.value = L.stack[L.top].value;
+        val.setfrom(L.stack[L.top - 1]);
+        L.stack[--L.top] = void 0;
 
         return name.value;
     }
