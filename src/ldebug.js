@@ -327,11 +327,11 @@ const findsetreg = function(p, lastpc, reg) {
     let jmptarget = 0;  /* any code before this address is conditional */
     for (let pc = 0; pc < lastpc; pc++) {
         let i = p.code[pc];
-        let op = lopcodes.OpCodes[i.opcode];
-        let a = i.A;
+        let op = lopcodes.OpCodes[lopcodes.GET_OPCODE(i)];
+        let a = lopcodes.GETARG_A(i);
         switch (op) {
             case 'OP_LOADNIL': {
-                let b = i.B;
+                let b = lopcodes.GETARG_B(i);
                 if (a <= reg && reg <= a + b)  /* set registers from 'a' to 'a+b' */
                     setreg = filterpc(pc, jmptarget);
                 break;
@@ -348,7 +348,7 @@ const findsetreg = function(p, lastpc, reg) {
                 break;
             }
             case 'OP_JMP': {
-                let b = i.sBx;
+                let b = lopcodes.GETARG_sBx(i);
                 let dest = pc + 1 + b;
                 /* jump is forward and do not skip 'lastpc'? */
                 if (pc < dest && dest <= lastpc) {
@@ -358,7 +358,7 @@ const findsetreg = function(p, lastpc, reg) {
                 break;
             }
             default:
-                if (lopcodes.testAMode(i.opcode) && reg === a)
+                if (lopcodes.testAMode(lopcodes.GET_OPCODE(i)) && reg === a)
                     setreg = filterpc(pc, jmptarget);
                 break;
         }
@@ -383,31 +383,31 @@ const getobjname = function(p, lastpc, reg) {
     let pc = findsetreg(p, lastpc, reg);
     if (pc !== -1) {  /* could find instruction? */
         let i = p.code[pc];
-        let op = lopcodes.OpCodes[i.opcode];
+        let op = lopcodes.OpCodes[lopcodes.GET_OPCODE(i)];
         switch (op) {
             case 'OP_MOVE': {
-                let b = i.B;  /* move from 'b' to 'a' */
-                if (b < i.A)
+                let b = lopcodes.GETARG_B(i);  /* move from 'b' to 'a' */
+                if (b < lopcodes.GETARG_A(i))
                     return getobjname(p, pc, b);  /* get name for 'b' */
                 break;
             }
             case 'OP_GETTABUP':
             case 'OP_GETTABLE': {
-                let k = i.C;  /* key index */
-                let t = i.B;  /* table index */
+                let k = lopcodes.GETARG_C(i);  /* key index */
+                let t = lopcodes.GETARG_B(i);  /* table index */
                 let vn = op === 'OP_GETTABLE' ? lfunc.luaF_getlocalname(p, t + 1, pc) : upvalname(p, t);
                 r.name = kname(p, pc, k).name;
                 r.funcname = vn && vn === "_ENV" ? defs.to_luastring("global", true) : defs.to_luastring("field", true);
                 return r;
             }
             case 'OP_GETUPVAL': {
-                r.name = upvalname(p, i.B);
+                r.name = upvalname(p, lopcodes.GETARG_B(i));
                 r.funcname = defs.to_luastring("upvalue", true);
                 return r;
             }
             case 'OP_LOADK':
             case 'OP_LOADKX': {
-                let b = op === 'OP_LOADK' ? i.Bx : p.code[pc + 1].Ax;
+                let b = op === 'OP_LOADK' ? lopcodes.GETARG_Bx(i) : lopcodes.GETARG_Ax(p.code[pc + 1]);
                 if (p.k[b].ttisstring()) {
                     r.name = p.k[b].tsvalue();
                     r.funcname = defs.to_luastring("constant", true);
@@ -416,7 +416,7 @@ const getobjname = function(p, lastpc, reg) {
                 break;
             }
             case 'OP_SELF': {
-                let k = i.C;
+                let k = lopcodes.GETARG_C(i);
                 r.name = kname(p, pc, k).name;
                 r.funcname = defs.to_luastring("method", true);
                 return r;
@@ -451,10 +451,10 @@ const funcnamefromcode = function(L, ci) {
         return r;
     }
 
-    switch (lopcodes.OpCodes[i.opcode]) {
+    switch (lopcodes.OpCodes[lopcodes.GET_OPCODE(i)]) {
         case 'OP_CALL':
         case 'OP_TAILCALL':
-            return getobjname(p, pc, i.A);  /* get function name */
+            return getobjname(p, pc, lopcodes.GETARG_A(i));  /* get function name */
         case 'OP_TFORCALL':
             r.name = defs.to_luastring("for iterator", true);
             r.funcname = defs.to_luastring("for iterator", true);

@@ -734,8 +734,8 @@ const constructor = function(ls, t) {
     } while (testnext(ls, char[',']) || testnext(ls, char[';']));
     check_match(ls, char['}'], char['{'], line);
     lastlistfield(fs, cc);
-    lopcodes.SETARG_B(fs.f.code[pc], lobject.luaO_int2fb(cc.na));  /* set initial array size */
-    lopcodes.SETARG_C(fs.f.code[pc], lobject.luaO_int2fb(cc.nh));  /* set initial table size */
+    fs.f.code[pc] = lopcodes.SETARG_B(fs.f.code[pc], lobject.luaO_int2fb(cc.na));  /* set initial array size */
+    fs.f.code[pc] = lopcodes.SETARG_C(fs.f.code[pc], lobject.luaO_int2fb(cc.nh));  /* set initial table size */
 };
 
 /* }====================================================================== */
@@ -1432,7 +1432,8 @@ const exprstat= function(ls) {
     }
     else {  /* stat -> func */
         check_condition(ls, v.v.k === expkind.VCALL, defs.to_luastring("syntax error", true));
-        lopcodes.SETARG_C(lcode.getinstruction(fs, v.v), 1);  /* call statement uses no results */
+        /* getinstruction */
+        fs.f.code[v.v.u.info] = lopcodes.SETARG_C(fs.f.code[v.v.u.info], 1); /* call statement uses no results */
     }
 };
 
@@ -1448,8 +1449,9 @@ const retstat = function(ls) {
         if (hasmultret(e.k)) {
             lcode.luaK_setmultret(fs, e);
             if (e.k === expkind.VCALL && nret === 1) {  /* tail call? */
-                lopcodes.SET_OPCODE(lcode.getinstruction(fs, e), OpCodesI.OP_TAILCALL);
-                assert(lcode.getinstruction(fs, e).A === fs.nactvar);
+                /* getinstruction */
+                fs.f.code[e.u.info] = lopcodes.SET_OPCODE(fs.f.code[e.u.info], OpCodesI.OP_TAILCALL);
+                assert(lopcodes.GETARG_A(fs.f.code[e.u.info]) === fs.nactvar);
             }
             first = fs.nactvar;
             nret = defs.LUA_MULTRET;  /* return all values */

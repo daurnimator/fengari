@@ -246,21 +246,23 @@ const MASK0 = function(n, p) {
 };
 
 const GET_OPCODE = function(i) {
-    return i.opcode;
+    return (i >> POS_OP) & MASK1(SIZE_OP, 0);
 };
 
 const SET_OPCODE = function(i, o) {
-    i.code = (i.code & MASK0(SIZE_OP, POS_OP)) | ((o << POS_OP) & MASK1(SIZE_OP, POS_OP));
-    return fullins(i);
+    return (i & MASK0(SIZE_OP, POS_OP)) | ((o << POS_OP) & MASK1(SIZE_OP, POS_OP));
+};
+
+const getarg = function(i, pos, size) {
+    return (i >> pos) & MASK1(size, 0);
 };
 
 const setarg = function(i, v, pos, size) {
-    i.code = (i.code & MASK0(size, pos)) | ((v << pos) & MASK1(size, pos));
-    return fullins(i);
+    return (i & MASK0(size, pos)) | ((v << pos) & MASK1(size, pos));
 };
 
 const GETARG_A = function(i) {
-    return i.A;
+    return getarg(i, POS_A, SIZE_A);
 };
 
 const SETARG_A = function(i,v) {
@@ -268,7 +270,7 @@ const SETARG_A = function(i,v) {
 };
 
 const GETARG_B = function(i) {
-    return i.B;
+    return getarg(i, POS_B, SIZE_B);
 };
 
 const SETARG_B = function(i,v) {
@@ -276,7 +278,7 @@ const SETARG_B = function(i,v) {
 };
 
 const GETARG_C = function(i) {
-    return i.C;
+    return getarg(i, POS_C, SIZE_C);
 };
 
 const SETARG_C = function(i,v) {
@@ -284,7 +286,7 @@ const SETARG_C = function(i,v) {
 };
 
 const GETARG_Bx = function(i) {
-    return i.Bx;
+    return getarg(i, POS_Bx, SIZE_Bx);
 };
 
 const SETARG_Bx = function(i,v) {
@@ -292,7 +294,7 @@ const SETARG_Bx = function(i,v) {
 };
 
 const GETARG_Ax = function(i) {
-    return i.Ax;
+    return getarg(i, POS_Ax, SIZE_Ax);
 };
 
 const SETARG_Ax = function(i,v) {
@@ -300,51 +302,23 @@ const SETARG_Ax = function(i,v) {
 };
 
 const GETARG_sBx = function(i) {
-    return i.sBx;
+    return GETARG_Bx(i) - MAXARG_sBx;
 };
 
 const SETARG_sBx = function(i, b) {
     return SETARG_Bx(i, b + MAXARG_sBx);
 };
 
-/*
-** Pre-calculate all possible part of the instruction
-*/
-const fullins = function(ins) {
-    if (typeof ins === "number") {
-        return {
-            code:   ins,
-            opcode: (ins >> POS_OP) & MASK1(SIZE_OP, 0),
-            A:      (ins >> POS_A)  & MASK1(SIZE_A,  0),
-            B:      (ins >> POS_B)  & MASK1(SIZE_B,  0),
-            C:      (ins >> POS_C)  & MASK1(SIZE_C,  0),
-            Bx:     (ins >> POS_Bx) & MASK1(SIZE_Bx, 0),
-            Ax:     (ins >> POS_Ax) & MASK1(SIZE_Ax, 0),
-            sBx:    ((ins >> POS_Bx) & MASK1(SIZE_Bx, 0)) - MAXARG_sBx
-        };
-    } else {
-        let i = ins.code;
-        ins.opcode = (i >> POS_OP) & MASK1(SIZE_OP, 0);
-        ins.A      = (i >> POS_A)  & MASK1(SIZE_A,  0);
-        ins.B      = (i >> POS_B)  & MASK1(SIZE_B,  0);
-        ins.C      = (i >> POS_C)  & MASK1(SIZE_C,  0);
-        ins.Bx     = (i >> POS_Bx) & MASK1(SIZE_Bx, 0);
-        ins.Ax     = (i >> POS_Ax) & MASK1(SIZE_Ax, 0);
-        ins.sBx    = ((i >> POS_Bx) & MASK1(SIZE_Bx, 0)) - MAXARG_sBx;
-        return ins;
-    }
-};
-
 const CREATE_ABC = function(o, a, b, c) {
-    return fullins(o << POS_OP | a << POS_A | b << POS_B | c << POS_C);
+    return o << POS_OP | a << POS_A | b << POS_B | c << POS_C;
 };
 
 const CREATE_ABx = function(o, a, bc) {
-    return fullins(o << POS_OP | a << POS_A | bc << POS_Bx);
+    return o << POS_OP | a << POS_A | bc << POS_Bx;
 };
 
 const CREATE_Ax = function(o, a) {
-    return fullins(o << POS_OP | a << POS_Ax);
+    return o << POS_OP | a << POS_Ax;
 };
 
 /* number of list items to accumulate before a SETLIST instruction */
@@ -398,7 +372,6 @@ module.exports.SIZE_B              = SIZE_B;
 module.exports.SIZE_Bx             = SIZE_Bx;
 module.exports.SIZE_C              = SIZE_C;
 module.exports.SIZE_OP             = SIZE_OP;
-module.exports.fullins             = fullins;
 module.exports.getBMode            = getBMode;
 module.exports.getCMode            = getCMode;
 module.exports.getOpMode           = getOpMode;

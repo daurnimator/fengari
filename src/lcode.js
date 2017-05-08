@@ -143,15 +143,16 @@ const luaK_nil = function(fs, from, n) {
     let l = from + n - 1;  /* last register to set nil */
     if (fs.pc > fs.lasttarget) {  /* no jumps to current position? */
         previous = fs.f.code[fs.pc-1];
-        if (previous.opcode === OpCodesI.OP_LOADNIL) {  /* previous is LOADNIL? */
-            let pfrom = previous.A;  /* get previous range */
-            let pl = pfrom + previous.B;
+        if (lopcodes.GET_OPCODE(previous) === OpCodesI.OP_LOADNIL) {  /* previous is LOADNIL? */
+            let pfrom = lopcodes.GETARG_A(previous);  /* get previous range */
+            let pl = pfrom + lopcodes.GETARG_B(previous);
             if ((pfrom <= from && from <= pl + 1) ||
                     (from <= pfrom && pfrom <= l + 1)) {  /* can connect both? */
                 if (pfrom < from) from = pfrom;  /* from = min(from, pfrom) */
                 if (pl > l) l = pl;  /* l = max(l, pl) */
-                lopcodes.SETARG_A(previous, from);
-                lopcodes.SETARG_B(previous, l - from);
+                previous = lopcodes.SETARG_A(previous, from);
+                previous = lopcodes.SETARG_B(previous, l - from);
+                fs.f.code[fs.pc-1] = previous;
                 return;
             }
         }  /* else go through */
@@ -159,16 +160,12 @@ const luaK_nil = function(fs, from, n) {
     luaK_codeABC(fs, OpCodesI.OP_LOADNIL, from, n - 1, 0);  /* else no optimization */
 };
 
-const getinstruction = function(fs, e) {
-    return fs.f.code[e.u.info];
-};
-
 /*
 ** Gets the destination address of a jump instruction. Used to traverse
 ** a list of jumps.
 */
 const getjump = function(fs, pc) {
-    let offset = fs.f.code[pc].sBx;
+    let offset = lopcodes.GETARG_sBx(fs.f.code[pc]);
     if (offset === NO_JUMP)  /* point to itself represents end of list */
         return NO_JUMP;  /* end of list */
     else
@@ -185,7 +182,7 @@ const fixjump = function(fs, pc, dest) {
     assert(dest !== NO_JUMP);
     if (Math.abs(offset) > lopcodes.MAXARG_sBx)
         llex.luaX_syntaxerror(fs.ls, defs.to_luastring("control structure too long", true));
-    lopcodes.SETARG_sBx(jmp, offset);
+    fs.f.code[pc] = lopcodes.SETARG_sBx(jmp, offset);
 };
 
 /*
@@ -255,12 +252,13 @@ const luaK_getlabel = function(fs) {
 ** Returns the position of the instruction "controlling" a given
 ** jump (that is, its condition), or the jump itself if it is
 ** unconditional.
+** NOTE: This returns the offset (not the Instruction* like in PUC-Rio Lua)
 */
 const getjumpcontrol = function(fs, pc) {
-    if (pc >= 1 && lopcodes.testTMode(fs.f.code[pc - 1].opcode))
-        return fs.f.code[pc - 1];
+    if (pc >= 1 && lopcodes.testTMode(lopcodes.GET_OPCODE(fs.f.code[pc - 1])))
+        return pc - 1;
     else
-        return fs.f.code[pc];
+        return pc;
 };
 
 /*
@@ -271,16 +269,18 @@ const getjumpcontrol = function(fs, pc) {
 ** no register value)
 */
 const patchtestreg = function(fs, node, reg) {
-    let i = getjumpcontrol(fs, node);
-    if (i.opcode !== OpCodesI.OP_TESTSET)
+    let offset = getjumpcontrol(fs, node);
+    let i = fs.f.code[offset];
+    if (lopcodes.GET_OPCODE(i) !== OpCodesI.OP_TESTSET)
         return false;  /* cannot patch other instructions */
-    if (reg !== lopcodes.NO_REG && reg !== i.B)
-        lopcodes.SETARG_A(i, reg);
+    if (reg !== lopcodes.NO_REG && reg !== lopcodes.GETARG_B(i))
+        i = lopcodes.SETARG_A(i, reg);
     else {
         /* no register to put value or register already has the value;
            change instruction to simple test */
-        i = lopcodes.CREATE_ABC(OpCodesI.OP_TEST, i.B, 0, i.C);
+        i = lopcodes.CREATE_ABC(OpCodesI.OP_TEST, lopcodes.GETARG_B(i), 0, lopcodes.GETARG_C(i));
     }
+    fs.f.code[offset] = i;
     return true;
 };
 
@@ -350,8 +350,8 @@ const luaK_patchclose = function(fs, list, level) {
     level++;  /* argument is +1 to reserve 0 as non-op */
     for (; list !== NO_JUMP; list = getjump(fs, list)) {
         let ins = fs.f.code[list];
-        assert(ins.opcode === OpCodesI.OP_JMP && (ins.A === 0 || ins.A >= level));
-        lopcodes.SETARG_A(ins, level);
+        assert(lopcodes.GET_OPCODE(ins) === OpCodesI.OP_JMP && (lopcodes.GETARG_A(ins) === 0 || lopcodes.GETARG_A(ins) >= level));
+        fs.f.code[list] = lopcodes.SETARG_A(ins, level);
     }
 };
 
@@ -557,12 +557,13 @@ const nilK = function(fs) {
 const luaK_setreturns = function(fs, e, nresults) {
     let ek = lparser.expkind;
     if (e.k === ek.VCALL) {  /* expression is an open function call? */
-        lopcodes.SETARG_C(getinstruction(fs, e), nresults + 1);
+        fs.f.code[e.u.info] = lopcodes.SETARG_C(fs.f.code[e.u.info], nresults + 1);
     }
     else if (e.k === ek.VVARARG) {
-        let pc = getinstruction(fs, e);
-        lopcodes.SETARG_B(pc, nresults + 1);
-        lopcodes.SETARG_A(pc, fs.freereg);
+        let pc = fs.f.code[e.u.info];
+        pc = lopcodes.SETARG_B(pc, nresults + 1);
+        pc = lopcodes.SETARG_A(pc, fs.freereg);
+        fs.f.code[e.u.info] = pc;
         luaK_reserveregs(fs, 1);
     }
     else assert(nresults === defs.LUA_MULTRET);
@@ -586,11 +587,11 @@ const luaK_setoneret = function(fs, e) {
     let ek = lparser.expkind;
     if (e.k === ek.VCALL) {  /* expression is an open function call? */
         /* already returns 1 value */
-        assert(getinstruction(fs, e).C === 2);
+        assert(lopcodes.GETARG_C(fs.f.code[e.u.info]) === 2);
         e.k = ek.VNONRELOC;  /* result has fixed position */
-        e.u.info = getinstruction(fs, e).A;
+        e.u.info = lopcodes.GETARG_A(fs.f.code[e.u.info]);
     } else if (e.k === ek.VVARARG) {
-        lopcodes.SETARG_B(getinstruction(fs, e), 2);
+        fs.f.code[e.u.info] = lopcodes.SETARG_B(fs.f.code[e.u.info], 2);
         e.k = ek.VRELOCABLE;  /* can relocate its simple result */
     }
 };
@@ -667,8 +668,8 @@ const discharge2reg = function(fs, e, reg) {
             break;
         }
         case ek.VRELOCABLE: {
-            let pc = getinstruction(fs, e);
-            lopcodes.SETARG_A(pc, reg);  /* instruction will put result in 'reg' */
+            let pc = fs.f.code[e.u.info];
+            fs.f.code[e.u.info] = lopcodes.SETARG_A(pc, reg);  /* instruction will put result in 'reg' */
             break;
         }
         case ek.VNONRELOC: {
@@ -702,7 +703,7 @@ const discharge2anyreg = function(fs, e) {
 const need_value = function(fs, list) {
     for (; list !== NO_JUMP; list = getjump(fs, list)) {
         let i = getjumpcontrol(fs, list);
-        if (i.opcode !== OpCodesI.OP_TESTSET) return true;
+        if (lopcodes.GET_OPCODE(i) !== OpCodesI.OP_TESTSET) return true;
     }
     return false;  /* not found */
 };
@@ -863,9 +864,11 @@ const luaK_self = function(fs, e, key) {
 ** Negate condition 'e' (where 'e' is a comparison).
 */
 const negatecondition = function(fs, e) {
-    let pc = getjumpcontrol(fs, e.u.info);
-    assert(lopcodes.testTMode(pc.opcode) && pc.opcode !== OpCodesI.OP_TESTSET && pc.opcode !== OpCodesI.OP_TEST);
-    lopcodes.SETARG_A(pc, !(pc.A));
+    let offset = getjumpcontrol(fs, e.u.info);
+    let pc = fs.f.code[offset];
+    assert(lopcodes.testTMode(lopcodes.GET_OPCODE(pc)) && lopcodes.GET_OPCODE(pc) !== OpCodesI.OP_TESTSET && lopcodes.GET_OPCODE(pc) !== OpCodesI.OP_TEST);
+    pc = lopcodes.SETARG_A(pc, !(lopcodes.GETARG_A(pc)));
+    fs.f.code[offset] = pc;
 };
 
 /*
@@ -876,10 +879,10 @@ const negatecondition = function(fs, e) {
 */
 const jumponcond = function(fs, e, cond) {
     if (e.k === lparser.expkind.VRELOCABLE) {
-        let ie = getinstruction(fs, e);
-        if (ie.opcode === OpCodesI.OP_NOT) {
+        let ie = fs.f.code[e.u.info];
+        if (lopcodes.GET_OPCODE(ie) === OpCodesI.OP_NOT) {
             fs.pc--;  /* remove previous OP_NOT */
-            return condjump(fs, OpCodesI.OP_TEST, ie.B, 0, !cond);
+            return condjump(fs, OpCodesI.OP_TEST, lopcodes.GETARG_B(ie), 0, !cond);
         }
         /* else go through */
     }
@@ -1180,12 +1183,12 @@ const luaK_posfix = function(fs, op, e1, e2, line) {
             break;
         }
         case BinOpr.OPR_CONCAT: {
-            let ins = getinstruction(fs, e2);
+            let ins = fs.f.code[e2.u.info];
             luaK_exp2val(fs, e2);
-            if (e2.k === ek.VRELOCABLE && ins.opcode === OpCodesI.OP_CONCAT) {
-                assert(e1.u.info === ins.B - 1);
+            if (e2.k === ek.VRELOCABLE && lopcodes.GET_OPCODE(ins) === OpCodesI.OP_CONCAT) {
+                assert(e1.u.info === lopcodes.GETARG_B(ins) - 1);
                 freeexp(fs, e1);
-                lopcodes.SETARG_B(ins, e1.u.info);
+                fs.f.code[e2.u.info] = lopcodes.SETARG_B(ins, e1.u.info);
                 e1.k = ek.VRELOCABLE; e1.u.info = e2.u.info;
             }
             else {
@@ -1245,7 +1248,6 @@ const luaK_setlist = function(fs, base, nelems, tostore) {
 module.exports.BinOpr             = BinOpr;
 module.exports.NO_JUMP            = NO_JUMP;
 module.exports.UnOpr              = UnOpr;
-module.exports.getinstruction     = getinstruction;
 module.exports.luaK_checkstack    = luaK_checkstack;
 module.exports.luaK_code          = luaK_code;
 module.exports.luaK_codeABC       = luaK_codeABC;
