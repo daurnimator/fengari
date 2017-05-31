@@ -123,9 +123,8 @@ const luaT_callTM = function(L, f, p1, p2, p3, hasres) {
         ldo.luaD_callnoyield(L, func, hasres);
 
     if (hasres) {  /* if has result, move it to its place */
-        let tv = L.stack[L.top-1];
-        delete L.stack[--L.top];
-        p3.setfrom(tv);
+        p3.setfrom(L.stack[L.top-1]);
+        ldo.adjust_top(L, L.top-1);
     }
 };
 

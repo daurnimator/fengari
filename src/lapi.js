@@ -109,14 +109,11 @@ const lua_xmove = function(from, to, n) {
     assert(n < (from.top - from.ci.funcOff), "not enough elements in the stack");
     assert(from.l_G === to.l_G, "moving among independent states");
     assert(to.ci.top - to.top >= n, "stack overflow");
-
-    from.top -= n;
+    ldo.adjust_top(to, to.top+n);
     for (let i = 0; i < n; i++) {
-        to.stack[to.top] = new lobject.TValue();
-        lobject.setobj2s(to, to.top, from.stack[from.top + i]);
-        delete from.stack[from.top + i];
-        to.top++;
+        lobject.setobj2s(to, to.top - n + i, from.stack[from.top - n + i]);
     }
+    ldo.adjust_top(from, from.top-n);
 };
 
 /*
@@ -292,23 +289,21 @@ const lua_pushcclosure = function(L, fn, n) {
     assert(typeof fn === "function");
     assert(typeof n === "number");
 
-    if (n === 0)
+    if (n === 0) {
         L.stack[L.top] = new TValue(CT.LUA_TLCF, fn);
-    else {
+        L.top++;
+        assert(L.top <= L.ci.top, "stack overflow");
+    } else {
         assert(n < L.top - L.ci.funcOff, "not enough elements in the stack");
         assert(n <= MAXUPVAL, "upvalue index too large");
 
         let cl = new CClosure(L, fn, n);
         for (let i=0; i<n; i++)
             cl.upvalue[i].setfrom(L.stack[L.top - n + i]);
-        for (let i=1; i<n; i++)
-            delete L.stack[--L.top];
-        if (n>0)
-            --L.top;
-        L.stack[L.top].setclCvalue(cl);
+
+        ldo.adjust_top(L, L.top-(n-1));
+        L.stack[L.top-1].setclCvalue(cl);
     }
-    L.top++;
-    assert(L.top <= L.ci.top, "stack overflow");
 };
 
 const lua_pushjsclosure = lua_pushcclosure;
@@ -357,9 +352,7 @@ const auxsetstr = function(L, t, k) {
     lobject.pushsvalue2s(L, str); /* push 'str' (to make it a TValue) */
     assert(L.top <= L.ci.top, "stack overflow");
     lvm.settable(L, t, L.stack[L.top - 1], L.stack[L.top - 2]);
-    /* pop value and key */
-    delete L.stack[--L.top];
-    delete L.stack[--L.top];
+    ldo.adjust_top(L, L.top-2);  /* pop value and key */
 };
 
 const lua_setglobal = function(L, name) {
@@ -389,7 +382,7 @@ const lua_setmetatable = function(L, objindex) {
         }
     }
 
-    delete L.stack[--L.top];
+    ldo.adjust_top(L, L.top-1);
     return true;
 };
 
@@ -398,8 +391,7 @@ const lua_settable = function(L, idx) {
 
     let t = index2addr(L, idx);
     lvm.settable(L, t, L.stack[L.top - 2], L.stack[L.top - 1]);
-    delete L.stack[--L.top];
-    delete L.stack[--L.top];
+    ldo.adjust_top(L, L.top-2);
 };
 
 const lua_setfield = function(L, idx, k) {
@@ -414,9 +406,7 @@ const lua_seti = function(L, idx, n) {
     L.top++;
     assert(L.top <= L.ci.top, "stack overflow");
     lvm.settable(L, t, L.stack[L.top - 1], L.stack[L.top - 2]);
-    /* pop value and key */
-    delete L.stack[--L.top];
-    delete L.stack[--L.top];
+    ldo.adjust_top(L, L.top-2);  /* pop value and key */
 };
 
 const lua_rawset = function(L, idx) {
@@ -432,8 +422,7 @@ const lua_rawset = function(L, idx) {
         slot.setfrom(v);
     }
     ltable.invalidateTMcache(o.value);
-    delete L.stack[--L.top];
-    delete L.stack[--L.top];
+    ldo.adjust_top(L, L.top-2);
 };
 
 const lua_rawseti = function(L, idx, n) {
@@ -441,7 +430,7 @@ const lua_rawseti = function(L, idx, n) {
     let o = index2addr(L, idx);
     assert(o.ttistable(), "table expected");
     ltable.luaH_setint(o.value, n, L.stack[L.top - 1]);
-    delete L.stack[--L.top];
+    ldo.adjust_top(L, L.top-1);
 };
 
 const lua_rawsetp = function(L, idx, p) {
@@ -456,7 +445,7 @@ const lua_rawsetp = function(L, idx, p) {
         let slot = ltable.luaH_set(L, o.value, k);
         slot.setfrom(v);
     }
-    delete L.stack[--L.top];
+    ldo.adjust_top(L, L.top-1);
 };
 
 /*
@@ -560,7 +549,7 @@ const lua_setupvalue = function(L, funcindex, n) {
         let name = aux.name;
         let val = aux.val;
         val.setfrom(L.stack[L.top-1]);
-        delete L.stack[--L.top];
+        ldo.adjust_top(L, L.top-1);
         return name;
     }
     return null;
@@ -900,7 +889,7 @@ const lua_arith = function(L, op) {
     }
     /* first operand at top - 2, second at top - 1; result go to top - 2 */
     lobject.luaO_arith(L, op, L.stack[L.top - 2], L.stack[L.top - 1], L.stack[L.top - 2]);
-    delete L.stack[--L.top];  /* remove second operand */
+    ldo.adjust_top(L, L.top-1);  /* remove second operand */
 };
 
 /*
@@ -942,7 +931,7 @@ const lua_setuservalue = function(L, idx) {
     let o = index2addr(L, idx);
     assert(L, o.ttisfulluserdata(), "full userdata expected");
     o.value.uservalue.setfrom(L.stack[L.top - 1]);
-    delete L.stack[--L.top];
+    ldo.adjust_top(L, L.top-1);
 };
 
 const lua_callk = function(L, nargs, nresults, ctx, k) {
@@ -1033,15 +1022,13 @@ const lua_error = function(L) {
 const lua_next = function(L, idx) {
     let t = index2addr(L, idx);
     assert(t.ttistable(), "table expected");
-    L.stack[L.top] = new TValue();
-    let more = ltable.luaH_next(L, t.value, L.top - 1);
+    ldo.adjust_top(L, L.top+1);
+    assert(L.top <= L.ci.top, "stack overflow");
+    let more = ltable.luaH_next(L, t.value, L.top - 2);
     if (more) {
-        L.top++;
-        assert(L.top <= L.ci.top, "stack overflow");
         return 1;
     } else {
-        delete L.stack[L.top];
-        delete L.stack[--L.top];
+        ldo.adjust_top(L, L.top-2);
         return 0;
     }
 };

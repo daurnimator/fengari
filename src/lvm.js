@@ -35,12 +35,12 @@ const luaV_finishOp = function(L) {
         case OCi.OP_UNM: case OCi.OP_BNOT: case OCi.OP_LEN:
         case OCi.OP_GETTABUP: case OCi.OP_GETTABLE: case OCi.OP_SELF: {
             lobject.setobjs2s(L, base + inst.A, L.top-1);
-            delete L.stack[--L.top];
+            ldo.adjust_top(L, L.top-1);
             break;
         }
         case OCi.OP_LE: case OCi.OP_LT: case OCi.OP_EQ: {
             let res = !L.stack[L.top - 1].l_isfalse();
-            delete L.stack[--L.top];
+            ldo.adjust_top(L, L.top-1);
             if (ci.callstatus & lstate.CIST_LEQ) {  /* "<=" using "<" instead? */
                 assert(op === OCi.OP_LE);
                 ci.callstatus ^= lstate.CIST_LEQ;  /* clear mark */
@@ -1025,8 +1025,7 @@ const luaV_concat = function(L, total) {
         }
         total -= n - 1; /* got 'n' strings to create 1 new */
         /* popped 'n' strings and pushed one */
-        for (; L.top > top-(n-1);)
-            delete L.stack[--L.top];
+        ldo.adjust_top(L, top-(n-1));
     } while (total > 1); /* repeat until only 1 result left */
 };
 

@@ -157,7 +157,7 @@ const lua_setlocal = function(L, ar, n) {
     let pos = local.pos;
     if (name) {
         lobject.setobjs2s(L, pos, L.top - 1);
-        delete L.stack[--L.top];  /* pop value */
+        ldo.adjust_top(L, L.top-1);  /* pop value */
     }
     swapextra(L);
     return name;

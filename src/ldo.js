@@ -52,8 +52,7 @@ const seterrorobj = function(L, errcode, oldtop) {
         }
     }
 
-    while (L.top > oldtop + 1)
-        delete L.stack[--L.top];
+    adjust_top(L, oldtop+1);
 };
 
 const ERRORSTACKSIZE = luaconf.LUAI_MAXSTACK + 200;
@@ -213,9 +212,7 @@ const moveresults = function(L, firstResult, res, nres, wanted) {
         case defs.LUA_MULTRET: {
             for (let i = 0; i < nres; i++)
                 lobject.setobjs2s(L, res + i, firstResult + i);
-            for (let i=L.top; i>=(res + nres); i--)
-                delete L.stack[i];
-            L.top = res + nres;
+            adjust_top(L, res + nres);
             return false;
         }
         default: {
@@ -236,10 +233,7 @@ const moveresults = function(L, firstResult, res, nres, wanted) {
             break;
         }
     }
-    let newtop = res + wanted; /* top points after the last result */
-    for (let i=L.top; i>=newtop; i--)
-        delete L.stack[i];
-    L.top = newtop;
+    adjust_top(L, res + wanted);  /* top points after the last result */
     return true;
 };
 
@@ -497,8 +491,7 @@ const resume_error = function(L, msg, narg) {
         assert(L.top <= L.ci.top, "stack overflow");
     } else {
         /* remove args from the stack */
-        for (let i=1; i<narg; i++)
-            delete L.stack[--L.top];
+        adjust_top(L, L.top-(narg-1));
         lobject.setsvalue2s(L, L.top-1, ts);  /* push error message */
     }
     return TS.LUA_ERRRUN;
