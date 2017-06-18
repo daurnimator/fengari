@@ -466,9 +466,16 @@ const lua_rawsetp = function(L, idx, p) {
 const auxgetstr = function(L, t, k) {
     assert(defs.is_luastring(k), "key must be an array of bytes");
     let str = lstring.luaS_new(L, k);
-    lobject.pushsvalue2s(L, str);
-    assert(L.top <= L.ci.top, "stack overflow");
-    lvm.luaV_gettable(L, t, L.stack[L.top - 1], L.top - 1);
+    let slot;
+    if (t.ttistable() && (slot = ltable.luaH_getstr(t.value, str), !slot.ttisnil())) { /* luaV_fastget */
+        lobject.pushobj2s(L, slot);
+        assert(L.top <= L.ci.top, "stack overflow");
+    }
+    else {
+        lobject.pushsvalue2s(L, str);
+        assert(L.top <= L.ci.top, "stack overflow");
+        lvm.luaV_finishget(L, t, L.stack[L.top - 1], L.top - 1, slot);
+    }
     return L.stack[L.top - 1].ttnov();
 };
 
@@ -622,10 +629,17 @@ const lua_getfield = function(L, idx, k) {
 const lua_geti = function(L, idx, n) {
     assert(typeof n === "number" && (n|0) === n);
     let t = index2addr(L, idx);
-    L.stack[L.top] = new TValue(CT.LUA_TNUMINT, n);
-    L.top++;
-    assert(L.top <= L.ci.top, "stack overflow");
-    lvm.luaV_gettable(L, t, L.stack[L.top - 1], L.top - 1);
+    let slot;
+    if (t.ttistable() && (slot = ltable.luaH_getint(t.value, n), !slot.ttisnil())) { /* luaV_fastget */
+        lobject.pushobj2s(L, slot);
+        assert(L.top <= L.ci.top, "stack overflow");
+    }
+    else {
+        L.stack[L.top] = new TValue(CT.LUA_TNUMINT, n);
+        L.top++;
+        assert(L.top <= L.ci.top, "stack overflow");
+        lvm.luaV_finishget(L, t, L.stack[L.top - 1], L.top - 1, slot);
+    }
     return L.stack[L.top - 1].ttnov();
 };
 

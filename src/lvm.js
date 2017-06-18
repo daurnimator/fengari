@@ -192,8 +192,14 @@ const luaV_execute = function(L) {
             case OCi.OP_SELF: {
                 let rb = RB(L, base, i);
                 let rc = RKC(L, base, k, i);
+                let key = rc.tsvalue();
                 lobject.setobjs2s(L, ra + 1, rb);
-                luaV_gettable(L, L.stack[rb], rc, ra);
+                let self = L.stack[rb];
+                let aux;
+                if (self.ttistable() && (aux = ltable.luaH_getstr(self.value, key), !aux.ttisnil())) { /* luaV_fastget */
+                    lobject.setobj2s(L, ra, aux);
+                }
+                else luaV_finishget(L, self, rc, ra, aux);
                 break;
             }
             case OCi.OP_ADD: {
@@ -975,37 +981,44 @@ const luaV_concat = function(L, total) {
 
 const MAXTAGLOOP = 2000;
 
-const luaV_gettable = function(L, t, key, ra) {
+const luaV_finishget = function(L, t, key, val, slot) {
     for (let loop = 0; loop < MAXTAGLOOP; loop++) {
         let tm;
-
-        if (!t.ttistable()) {
+        if (slot === null) {   /* 't' is not a table? */
+            assert(!t.ttistable());
             tm = ltm.luaT_gettmbyobj(L, t, ltm.TMS.TM_INDEX);
             if (tm.ttisnil())
                 ldebug.luaG_typeerror(L, t, defs.to_luastring('index', true)); /* no metamethod */
             /* else will try the metamethod */
-        } else {
-            let slot = ltable.luaH_get(L, t.value, key);
-            if (!slot.ttisnil()) {
-                lobject.setobj2s(L, ra, slot);
+        }
+        else {  /* 't' is a table */
+            assert(slot.ttisnil());
+            tm = ltm.fasttm(L, t.value.metatable, ltm.TMS.TM_INDEX);  /* table's metamethod */
+            if (tm === null) { /* no metamethod? */
+                L.stack[val].setnilvalue(); /* result is nil */
                 return;
-            } else { /* 't' is a table */
-                tm = ltm.fasttm(L, t.value.metatable, ltm.TMS.TM_INDEX);  /* table's metamethod */
-                if (tm === null) { /* no metamethod? */
-                    L.stack[ra].setnilvalue(); /* result is nil */
-                    return;
-                }
             }
-            /* else will try the metamethod */
         }
         if (tm.ttisfunction()) { /* is metamethod a function? */
-            ltm.luaT_callTM(L, tm, t, key, L.stack[ra], 1); /* call it */
+            ltm.luaT_callTM(L, tm, t, key, L.stack[val], 1); /* call it */
             return;
         }
         t = tm;  /* else try to access 'tm[key]' */
+        if (t.ttistable() && (slot = ltable.luaH_get(L, t.value, key), !slot.ttisnil())) { /* luaV_fastget */
+            lobject.setobj2s(L, val, slot);  /* done */
+            return;
+        }
+        /* else repeat (tail call 'luaV_finishget') */
     }
-
     ldebug.luaG_runerror(L, defs.to_luastring("'__index' chain too long; possible loop", true));
+};
+
+const luaV_gettable = function(L, t, k, v) {
+    let slot;
+    if (t.ttistable() && (slot = ltable.luaH_get(L, t.value, k), !slot.ttisnil())) { /* luaV_fastget */
+        lobject.setobj2s(L, v, slot);
+    }
+    else luaV_finishget(L, t, k, v, slot);
 };
 
 const settable = function(L, t, key, val) {
@@ -1046,6 +1059,7 @@ module.exports.luaV_concat      = luaV_concat;
 module.exports.luaV_div         = luaV_div;
 module.exports.luaV_equalobj    = luaV_equalobj;
 module.exports.luaV_execute     = luaV_execute;
+module.exports.luaV_finishget   = luaV_finishget;
 module.exports.luaV_finishOp    = luaV_finishOp;
 module.exports.luaV_lessequal   = luaV_lessequal;
 module.exports.luaV_lessthan    = luaV_lessthan;
