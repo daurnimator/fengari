@@ -131,9 +131,16 @@ const add = function(t, hash, key, value) {
     t.l = entry;
 };
 
-const is_valid_weakmap_key = function(k) {
-    return typeof k === 'object' ? k !== null : typeof k === 'function';
-};
+let is_valid_weakmap_key;
+if (WeakMap) {
+    is_valid_weakmap_key = function(k) {
+        return typeof k === 'object' ? k !== null : typeof k === 'function';
+    };
+} else {
+    is_valid_weakmap_key = function(k) {
+        return false;
+    }
+}
 
 /* Move out of 'strong' part and into 'dead' part. */
 const mark_dead = function(t, hash) {

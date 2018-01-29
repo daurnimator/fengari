@@ -677,15 +677,17 @@ const luaO_pushvfstring = function(L, fmt, argp) {
                             break;
                         }
                         /* fall through */
-                    case "function": {
-                        let id = L.l_G.ids.get(v);
-                        if (!id) {
-                            id = L.l_G.id_counter++;
-                            L.l_G.ids.set(v, id);
+                    case "function":
+                        if (L.l_G.ids) {
+                            let id = L.l_G.ids.get(v);
+                            if (!id) {
+                                id = L.l_G.id_counter++;
+                                L.l_G.ids.set(v, id);
+                            }
+                            pushstr(L, to_luastring("0x"+id.toString(16)));
+                            break;
                         }
-                        pushstr(L, to_luastring("0x"+id.toString(16)));
-                        break;
-                    }
+                        /* fall through */
                     default:
                         /* user provided object. no id available */
                         pushstr(L, to_luastring("<id NYI>"));

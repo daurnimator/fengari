@@ -80,8 +80,7 @@ class global_State {
 
     constructor() {
         this.id_counter = 0; /* used to give objects unique ids */
-        this.ids = new WeakMap();
-
+        this.ids = WeakMap ? new WeakMap() : void 0;
         this.mainthread = null;
         this.l_registry = new lobject.TValue(LUA_TNIL, null);
         this.panic = null;
